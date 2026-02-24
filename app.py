@@ -1,144 +1,97 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from vnstock import Vnstock
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from streamlit_autorefresh import st_autorefresh
+from vnstock import Vnstock
+import datetime
 
-st.set_page_config(page_title="VN STOCK MAX ENGINE", layout="wide")
+st.set_page_config(page_title="VN STOCK MAX ENGINE 2026", layout="wide")
+
 st.title("🚀 VN STOCK MAX ENGINE 2026 (HOSE - MULTITHREAD)")
 
-# ===============================
-# REFRESH 3 PHÚT + CLEAR CACHE
-# ===============================
-REFRESH_INTERVAL = 180
-refresh_count = st_autorefresh(interval=REFRESH_INTERVAL * 1000, key="refresh")
+# =========================
+# AUTO REFRESH 3 PHÚT
+# =========================
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = datetime.datetime.now()
 
-if refresh_count > 0:
+if (datetime.datetime.now() - st.session_state.last_refresh).seconds > 180:
     st.cache_data.clear()
+    st.session_state.last_refresh = datetime.datetime.now()
+    st.rerun()
 
-# ===============================
-# INIT VNSTOCK
-# ===============================
-vn = Vnstock()
+# =========================
+# CLEAR CACHE BUTTON
+# =========================
+if st.button("🔄 Refresh Now"):
+    st.cache_data.clear()
+    st.session_state.last_refresh = datetime.datetime.now()
+    st.rerun()
 
-# ===============================
-# LẤY DANH SÁCH TOÀN HOSE
-# ===============================
+# =========================
+# LẤY DANH SÁCH HOSE
+# =========================
 @st.cache_data(ttl=3600)
 def get_all_hose_symbols():
-    listing = vn.stock(symbol="VCB", source="VCI").listing.symbols_by_exchange()
+    vn = Vnstock().stock(symbol="VCB", source="VCI")
+    listing = vn.listing.symbols_by_exchange()
     hose = listing[listing["exchange"] == "HOSE"]
     return hose["symbol"].tolist()
 
-ALL_STOCKS = get_all_hose_symbols()
-
-with st.spinner("Đang lọc mã theo thanh khoản..."):
-    ALL_STOCKS = filter_by_volume(ALL_STOCKS, min_avg_volume=1000000)
-
-st.success(f"Số mã sau khi lọc thanh khoản: {len(ALL_STOCKS)}")
-
-
-
-# ===============================
-# LẤY DỮ LIỆU GIÁ
-# ===============================
-def get_price(symbol, start="2024-01-01", end="2026-12-31"):
+# =========================
+# LẤY GIÁ
+# =========================
+@st.cache_data(ttl=600)
+def get_price(symbol):
     try:
-        stock = vn.stock(symbol=symbol, source="VCI")
-        df = stock.quote.history(start=start, end=end, interval="1D")
+        vn = Vnstock().stock(symbol=symbol, source="VCI")
+        df = vn.quote.history(start="2024-01-01", interval="1D")
         return df
     except:
         return pd.DataFrame()
 
-# ===============================
-# CHỈ BÁO
-# ===============================
-def calculate_rsi(data, period=14):
-    delta = data.diff()
-    gain = delta.clip(lower=0).rolling(period).mean()
-    loss = (-delta.clip(upper=0)).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+# =========================
+# RSI
+# =========================
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
 
-def calculate_macd(data):
-    ema12 = data.ewm(span=12, adjust=False).mean()
-    ema26 = data.ewm(span=26, adjust=False).mean()
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+# =========================
+# MACD
+# =========================
+def calculate_macd(series):
+    ema12 = series.ewm(span=12, adjust=False).mean()
+    ema26 = series.ewm(span=26, adjust=False).mean()
     macd = ema12 - ema26
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd, signal
 
-# ===============================
-# BACKTEST
-# ===============================
-def backtest_strategy(df):
-
-    if df.empty:
-        return None
-
-    close = df["close"]
-    rsi = calculate_rsi(close)
-    macd, signal = calculate_macd(close)
-
-    position = 0
-    entry_price = 0
-    trades = []
-    equity = 1
-    equity_curve = []
-
-    for i in range(len(df)):
-
-        if i < 30:
-            equity_curve.append(equity)
-            continue
-
-        if position == 0:
-            if rsi.iloc[i] < 30 and macd.iloc[i] > signal.iloc[i]:
-                position = 1
-                entry_price = close.iloc[i]
-
-        elif position == 1:
-            if rsi.iloc[i] > 70 and macd.iloc[i] < signal.iloc[i]:
-                exit_price = close.iloc[i]
-                profit = (exit_price - entry_price) / entry_price
-                trades.append(profit)
-                equity *= (1 + profit)
-                position = 0
-
-        equity_curve.append(equity)
-
-    total_return = (equity - 1) * 100
-    winrate = (len([t for t in trades if t > 0]) / len(trades) * 100) if trades else 0
-
-    peak = pd.Series(equity_curve).cummax()
-    drawdown = (pd.Series(equity_curve) - peak) / peak
-    max_dd = drawdown.min() * 100
-
-    return {
-        "Total Return (%)": round(total_return,2),
-        "Win Rate (%)": round(winrate,2),
-        "Max Drawdown (%)": round(max_dd,2),
-        "Number of Trades": len(trades),
-        "Equity Curve": equity_curve
-    }
-
-# ===============================
-# XỬ LÝ MỘT MÃ (ĐA LUỒNG)
-# ===============================
+# =========================
+# PROCESS SYMBOL (ALL-IN-ONE)
+# =========================
 def process_symbol(symbol):
 
-    df = get_price(symbol, start="2024-01-01")
+    df = get_price(symbol)
+
     if df.empty or len(df) < 50:
         return None
 
     close = df["close"]
     volume = df["volume"]
 
-    avg_volume = volume.tail(30).mean()
     price = close.iloc[-1]
+    avg_volume = volume.tail(30).mean()
     avg_value = avg_volume * price
 
-    # Chỉ báo
     rsi_series = calculate_rsi(close)
     macd, signal = calculate_macd(close)
 
@@ -160,9 +113,9 @@ def process_symbol(symbol):
 
     return [
         symbol,
-        price,
-        avg_volume,
-        avg_value,
+        round(price,2),
+        int(avg_volume),
+        int(avg_value),
         round(rsi,2),
         round(ma20,2),
         round(macd_value,2),
@@ -170,86 +123,64 @@ def process_symbol(symbol):
         signal_text
     ]
 
-# ===============================
-# QUÉT ĐA LUỒNG
-# ===============================
-@st.cache_data(ttl=180)
-def scan_all_symbols(symbols):
+# =========================
+# MULTITHREAD SCAN
+# =========================
+def scan_market(symbols, max_workers=20):
 
     results = []
 
-    with ThreadPoolExecutor(max_workers=15) as executor:
-        futures = [executor.submit(process_symbol, s) for s in symbols]
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(process_symbol, s): s for s in symbols}
 
         for future in as_completed(futures):
-            result = future.result()
-            if result:
-                results.append(result)
+            res = future.result()
+            if res:
+                results.append(res)
 
     return results
 
-with st.spinner("Đang quét toàn bộ HOSE..."):
-    data = scan_all_symbols(ALL_STOCKS)
+# =========================
+# MAIN EXECUTION
+# =========================
+ALL_STOCKS = get_all_hose_symbols()
 
+st.info(f"Tổng số mã HOSE: {len(ALL_STOCKS)}")
 
-st.subheader("🔎 Bộ lọc nâng cao")
+if st.button("🚀 QUÉT TOÀN BỘ HOSE"):
 
-min_volume = st.number_input("Thanh khoản TB tối thiểu:", value=1000000)
-min_value = st.number_input("Giá trị giao dịch TB tối thiểu:", value=500000000)
-top_n = st.number_input("Giới hạn số mã (Top N thanh khoản):", value=200)
+    with st.spinner("Đang quét thị trường..."):
 
-# Lọc thanh khoản
-df = df[df["VOL_TB_30"] >= min_volume]
+        data = scan_market(ALL_STOCKS, max_workers=20)
 
-# Lọc giá trị giao dịch
-df = df[df["GIÁ_TRỊ_TB_30"] >= min_value]
+        df = pd.DataFrame(
+            data,
+            columns=[
+                "MÃ","GIÁ",
+                "VOL_TB_30","GIÁ_TRỊ_TB_30",
+                "RSI","MA20","MACD","SIGNAL","TÍN HIỆU"
+            ]
+        )
 
-# Sắp xếp theo thanh khoản giảm dần
-df = df.sort_values("VOL_TB_30", ascending=False)
+        # =========================
+        # BỘ LỌC NÂNG CAO
+        # =========================
+        st.subheader("🔎 Bộ lọc nâng cao")
 
-# Giới hạn Top N
-df = df.head(top_n)
+        min_volume = st.number_input("Thanh khoản TB tối thiểu:", value=1000000)
+        min_value = st.number_input("Giá trị giao dịch TB tối thiểu:", value=0)
+        top_n = st.number_input("Top N thanh khoản:", value=200)
 
+        df = df[df["VOL_TB_30"] >= min_volume]
+        df = df[df["GIÁ_TRỊ_TB_30"] >= min_value]
 
-df = pd.DataFrame(
-    data,
-    columns=[
-        "MÃ","GIÁ",
-        "VOL_TB_30","GIÁ_TRỊ_TB_30",
-        "RSI","MA20","MACD","SIGNAL","TÍN HIỆU"
-    ]
-)
+        df = df.sort_values("VOL_TB_30", ascending=False).head(top_n)
 
-filter_signal = st.selectbox(
-    "Lọc tín hiệu:",
-    ["TẤT CẢ", "MUA", "BÁN"]
-)
+        filter_signal = st.selectbox("Chỉ hiển thị tín hiệu:", ["TẤT CẢ","MUA","BÁN"])
 
-if filter_signal != "TẤT CẢ":
-    df = df[df["TÍN HIỆU"] == filter_signal]
+        if filter_signal != "TẤT CẢ":
+            df = df[df["TÍN HIỆU"] == filter_signal]
 
-st.dataframe(df, use_container_width=True)
+        st.success(f"Số mã sau lọc: {len(df)}")
 
-# ===============================
-# BACKTEST UI
-# ===============================
-st.subheader("📊 Backtest chiến lược")
-
-symbol_bt = st.selectbox("Chọn mã để backtest:", ALL_STOCKS)
-
-if st.button("Chạy Backtest"):
-
-    df_bt = get_price(symbol_bt, start="2022-01-01")
-
-    result = backtest_strategy(df_bt)
-
-    if result:
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        col1.metric("Tổng lợi nhuận (%)", result["Total Return (%)"])
-        col2.metric("Winrate (%)", result["Win Rate (%)"])
-        col3.metric("Max Drawdown (%)", result["Max Drawdown (%)"])
-        col4.metric("Số lệnh", result["Number of Trades"])
-
-        st.line_chart(result["Equity Curve"])
+        st.dataframe(df, use_container_width=True)
