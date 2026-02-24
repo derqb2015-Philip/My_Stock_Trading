@@ -120,21 +120,26 @@ def backtest_strategy(df):
 # XỬ LÝ MỘT MÃ (ĐA LUỒNG)
 # ===============================
 def process_symbol(symbol):
-    df = get_price(symbol)
-    if df.empty:
+
+    df = get_price(symbol, start="2024-01-01")
+    if df.empty or len(df) < 50:
         return None
 
     close = df["close"]
+    volume = df["volume"]
 
-    rsi = calculate_rsi(close).iloc[-1]
-    ma20 = close.rolling(20).mean().iloc[-1]
+    avg_volume = volume.tail(30).mean()
+    price = close.iloc[-1]
+    avg_value = avg_volume * price
+
+    # Chỉ báo
+    rsi_series = calculate_rsi(close)
     macd, signal = calculate_macd(close)
 
+    rsi = rsi_series.iloc[-1]
+    ma20 = close.rolling(20).mean().iloc[-1]
     macd_value = macd.iloc[-1]
     signal_value = signal.iloc[-1]
-
-    price = close.iloc[-1]
-    volume = df["volume"].iloc[-1]
 
     signal_text = "GIỮ"
 
@@ -148,7 +153,10 @@ def process_symbol(symbol):
         signal_text = "BÁN"
 
     return [
-        symbol, price, volume,
+        symbol,
+        price,
+        avg_volume,
+        avg_value,
         round(rsi,2),
         round(ma20,2),
         round(macd_value,2),
@@ -177,9 +185,33 @@ def scan_all_symbols(symbols):
 with st.spinner("Đang quét toàn bộ HOSE..."):
     data = scan_all_symbols(ALL_STOCKS)
 
+
+st.subheader("🔎 Bộ lọc nâng cao")
+
+min_volume = st.number_input("Thanh khoản TB tối thiểu:", value=1000000)
+min_value = st.number_input("Giá trị giao dịch TB tối thiểu:", value=500000000)
+top_n = st.number_input("Giới hạn số mã (Top N thanh khoản):", value=200)
+
+# Lọc thanh khoản
+df = df[df["VOL_TB_30"] >= min_volume]
+
+# Lọc giá trị giao dịch
+df = df[df["GIÁ_TRỊ_TB_30"] >= min_value]
+
+# Sắp xếp theo thanh khoản giảm dần
+df = df.sort_values("VOL_TB_30", ascending=False)
+
+# Giới hạn Top N
+df = df.head(top_n)
+
+
 df = pd.DataFrame(
     data,
-    columns=["MÃ","GIÁ","KHỐI LƯỢNG","RSI","MA20","MACD","SIGNAL","TÍN HIỆU"]
+    columns=[
+        "MÃ","GIÁ",
+        "VOL_TB_30","GIÁ_TRỊ_TB_30",
+        "RSI","MA20","MACD","SIGNAL","TÍN HIỆU"
+    ]
 )
 
 filter_signal = st.selectbox(
