@@ -1,4 +1,5 @@
 streamlit
-tradingview_ta
+vnstock
 pandas
+numpy
 streamlit-autorefresh
