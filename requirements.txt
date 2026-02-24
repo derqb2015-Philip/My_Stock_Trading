@@ -1,0 +1,4 @@
+streamlit
+tradingview_ta
+pandas
+streamlit-autorefresh
