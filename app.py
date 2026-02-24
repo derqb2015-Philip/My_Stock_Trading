@@ -87,44 +87,44 @@ def process_symbol(symbol):
 
     close = df["close"]
     
-if symbol == "VNINDEX":
-    avg_volume = 0
-    avg_value = 0
-else:
-    volume = df["volume"]
-    avg_volume = volume.tail(30).mean()
-    avg_value = avg_volume * price
+    if symbol == "VNINDEX":
+        avg_volume = 0
+        avg_value = 0
+    else:
+        volume = df["volume"]
+        avg_volume = volume.tail(30).mean()
+        avg_value = avg_volume * price
     
-    rsi_series = calculate_rsi(close)
-    macd, signal = calculate_macd(close)
+        rsi_series = calculate_rsi(close)
+        macd, signal = calculate_macd(close)
 
-    rsi = rsi_series.iloc[-1]
-    ma20 = close.rolling(20).mean().iloc[-1]
-    macd_value = macd.iloc[-1]
-    signal_value = signal.iloc[-1]
+        rsi = rsi_series.iloc[-1]
+        ma20 = close.rolling(20).mean().iloc[-1]
+        macd_value = macd.iloc[-1]
+        signal_value = signal.iloc[-1]
 
-    signal_text = "GIỮ"
+        signal_text = "GIỮ"
 
-    if rsi < 30 and macd_value > signal_value:
-        signal_text = "MUA"
-    elif rsi > 70 and macd_value < signal_value:
-        signal_text = "BÁN"
-    elif macd_value > signal_value:
-        signal_text = "MUA"
-    elif macd_value < signal_value:
-        signal_text = "BÁN"
+        if rsi < 30 and macd_value > signal_value:
+            signal_text = "MUA"
+        elif rsi > 70 and macd_value < signal_value:
+            signal_text = "BÁN"
+        elif macd_value > signal_value:
+            signal_text = "MUA"
+        elif macd_value < signal_value:
+            signal_text = "BÁN"
 
-    return [
-        symbol,
-        round(price,2),
-        int(avg_volume),
-        int(avg_value),
-        round(rsi,2),
-        round(ma20,2),
-        round(macd_value,2),
-        round(signal_value,2),
-        signal_text
-    ]
+        return [
+            symbol,
+            round(price,2),
+            int(avg_volume),
+            int(avg_value),
+            round(rsi,2),
+            round(ma20,2),
+            round(macd_value,2),
+            round(signal_value,2),
+            signal_text
+        ]
 
 # =========================
 # MULTITHREAD SCAN
@@ -197,5 +197,6 @@ if st.button("🚀 QUÉT TOÀN BỘ HOSE"):
         st.success(f"Số mã sau lọc: {len(df)}")
 
         st.dataframe(df, use_container_width=True)
+
 
 
