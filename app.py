@@ -32,7 +32,13 @@ def get_all_hose_symbols():
     return hose["symbol"].tolist()
 
 ALL_STOCKS = get_all_hose_symbols()
-st.success(f"Tổng số mã HOSE: {len(ALL_STOCKS)}")
+
+with st.spinner("Đang lọc mã theo thanh khoản..."):
+    ALL_STOCKS = filter_by_volume(ALL_STOCKS, min_avg_volume=1000000)
+
+st.success(f"Số mã sau khi lọc thanh khoản: {len(ALL_STOCKS)}")
+
+
 
 # ===============================
 # LẤY DỮ LIỆU GIÁ
