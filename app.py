@@ -86,12 +86,15 @@ def process_symbol(symbol):
         return None
 
     close = df["close"]
+    
+    if symbol == "VNINDEX":
+    avg_volume = 0
+    avg_value = 0
+else:
     volume = df["volume"]
-
-    price = close.iloc[-1]
     avg_volume = volume.tail(30).mean()
     avg_value = avg_volume * price
-
+    
     rsi_series = calculate_rsi(close)
     macd, signal = calculate_macd(close)
 
@@ -143,9 +146,19 @@ def scan_market(symbols, max_workers=20):
 # =========================
 # MAIN EXECUTION
 # =========================
-ALL_STOCKS = get_all_hose_symbols()
+ALL_STOCKS = [
+    "VCB","BID","CTG","TCB","MBB","VPB","ACB","STB","SHB",
+    "HPG","HSG","NKG","FPT","MWG","PNJ","REE","GMD","VHC",
+    "VNM","SAB","MSN","SSI","VND","HCM","GAS","PLX","POW",
+    "BVH","VIC","VHM","VRE","DXG","DIG","KBC","PDR","NVL",
+    "DPM","DCM","ANV","PVS","PVD","KDH","HDG","HDC","CSV",
+    "CMG","BWE","SZC","TCH","IDC","VPI","BCM","CTR","CII",
+    "HAG","HNG","NLG","KSB","GEX","VGC","MSB","OCB","TPB"
+]
 
-st.info(f"Tổng số mã HOSE: {len(ALL_STOCKS)}")
+ALL_STOCKS.append("VNINDEX")
+
+st.info(f"Số mã đang quét: {len(ALL_STOCKS)}")
 
 if st.button("🚀 QUÉT TOÀN BỘ HOSE"):
 
@@ -184,3 +197,4 @@ if st.button("🚀 QUÉT TOÀN BỘ HOSE"):
         st.success(f"Số mã sau lọc: {len(df)}")
 
         st.dataframe(df, use_container_width=True)
+
