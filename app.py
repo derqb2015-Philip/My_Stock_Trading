@@ -87,7 +87,7 @@ def process_symbol(symbol):
 
     close = df["close"]
     
-    if symbol == "VNINDEX":
+if symbol == "VNINDEX":
     avg_volume = 0
     avg_value = 0
 else:
@@ -197,4 +197,5 @@ if st.button("🚀 QUÉT TOÀN BỘ HOSE"):
         st.success(f"Số mã sau lọc: {len(df)}")
 
         st.dataframe(df, use_container_width=True)
+
 
