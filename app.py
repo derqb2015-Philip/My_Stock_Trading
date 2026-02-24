@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from vnstock import listing_companies, stock_historical_data
+from vnstock import Vnstock
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from streamlit_autorefresh import st_autorefresh
 
@@ -22,9 +22,12 @@ if refresh_count > 0:
 # ===============================
 @st.cache_data(ttl=3600)
 def get_all_hose_symbols():
-    df = listing_companies()
-    hose = df[df["exchange"] == "HOSE"]
-    return hose["ticker"].dropna().tolist()
+
+    vn = Vnstock().stock(symbol="VCB", source="VCI")
+    listing = vn.listing.symbols_by_exchange()
+
+    hose = listing[listing["exchange"] == "HOSE"]
+    return hose["symbol"].tolist()
 
 ALL_STOCKS = get_all_hose_symbols()
 
